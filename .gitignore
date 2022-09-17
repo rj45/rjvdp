@@ -1,0 +1,11 @@
+.vscode
+
+tilemap/*.png
+tilemap/*.hex
+*.backup
+
+build
+fusesoc/build
+
+
+

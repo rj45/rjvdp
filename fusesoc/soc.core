@@ -1,0 +1,140 @@
+CAPI=2:
+name: rj45:rjvdp:soc:1.0.0
+description: An VDP test system on chip
+
+filesets:
+  vdp:
+    depend: ["rj45:rjvdp:vdp"]
+  data:
+    files:
+      - data/test.hex: {file_type: "hex", copyto: data/test.hex}
+      - data/finchpal.hex: {file_type: "hex", copyto: data/finchpal.hex}
+      - data/finch.hex: {file_type: "hex", copyto: data/finch.hex}
+      - data/testpal.hex: {file_type: "hex", copyto: data/testpal.hex}
+  top:
+    files:
+      - top.v: {file_type: verilogSource}
+  sim:
+    files:
+      - sim/main.cpp: {file_type: cppSource}
+      - sim/top_verilator.v: {file_type: verilogSource}
+      - sim/spiflash.v: {file_type: verilogSource}
+
+  icezero:
+    files:
+      - icezero/pins.pcf: {file_type: PCF}
+      - icezero/top_icezero.v: {file_type: verilogSource}
+
+  colorlight:
+    files:
+      - colorlight/pins.lpf: {file_type: LPF}
+      - colorlight/top_colorlight.v: {file_type: verilogSource}
+
+  dvi:
+    files:
+      - dvi/dvi.v: {file_type: verilogSource}
+      - dvi/dvi_serialiser.v: {file_type: verilogSource}
+      - dvi/dvi_tmds_encoder.v: {file_type: verilogSource}
+      - dvi/dvi_resync.v: {file_type: verilogSource}
+
+  ecp5pll:
+    files:
+      - ecp5pll/ecp5pll.sv: {file_type: systemVerilogSource}
+
+
+targets:
+  # The "default" target is special in FuseSoC and used in dependencies.
+  # The "&default" is a YAML anchor referenced later.
+  default: &default
+    filesets:
+      - vdp
+      - top
+      - data
+    toplevel: top
+
+  # The "sim" target simulates the design.
+  sim:
+    # Copy all key/value pairs from the "default" target.
+    <<: *default
+    description: Simulate the design
+    default_tool: verilator
+    filesets_append:
+      - sim
+    toplevel: top_verilator
+    tools:
+      verilator:
+        mode: cc
+        libs:
+          - -lSDL2
+        verilator_options:
+          - -Wno-PINMISSING
+          - -Wno-DECLFILENAME
+          - -Wno-MODDUP
+          - -Wno-UNUSED
+          - -Wno-WIDTH
+
+  # The "synth_ice40" target synthesizes the design.
+  synth_ice40: &synth_ice40
+    <<: *default
+    description: Synthesize the design for a generic board
+    default_tool: icestorm
+    tools:
+      icestorm:
+        pnr: none
+
+  # The "synth_ecp5" target synthesizes the design.
+  synth_ecp5: &synth_ecp5
+    <<: *default
+    description: Synthesize the design for a generic board
+    default_tool: trellis
+    tools:
+      trellis:
+        arch: ecp5
+
+  icezero:
+    <<: *synth_ice40
+    description: Synthesize the design for a the Trenz Electronic IceZero
+    filesets_append:
+      - icezero
+    toplevel: top_icezero
+    parameters:
+      - "use24bpp ? (hdmi24bpp=true)"
+    tools:
+      icestorm:
+        pnr: next
+        arch: ice40
+        nextpnr_options:
+          - "--hx8k"
+          - "--package tq144:4k"
+          - "--pcf-allow-unconstrained"
+          - "--opt-timing"
+        yosys_synth_options:
+
+  colorlight:
+    <<: *synth_ecp5
+    description: Synthesize the design for a the ColorLight i5 v7.0
+    filesets_append:
+      - colorlight
+      - dvi
+      - ecp5pll
+    toplevel: top_colorlight
+    parameters:
+      - "hdmi24bpp=true"
+    tools:
+      trellis:
+        arch: ecp5
+        output_format: json
+        nextpnr_options:
+          - "--25k"
+          - "--package CABGA381"
+          - "--speed 6"
+          - "--lpf-allow-unconstrained"
+        yosys_synth_options:
+
+
+parameters:
+  hdmi24bpp:
+    datatype: bool
+    default: false
+    description: Use 24bpp HDMI DVI adaptor
+    paramtype: vlogdefine
